@@ -1,8 +1,20 @@
 {
-    "compilerOptions": {
-      "module": "commonjs",
-      "target": "esnext",
-      "checkJs": true
-    },
-    "include": ["src/**/*.js", "src/scripts/library.d.ts"]
+  "typeAcquisition": {
+    "enable": true,
+    "include": [
+      "three",
+      "howler",
+      "peggy",
+      "stats.js"
+    ]
+  },
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "esnext",
+    "checkJs": true
+  },
+  "include": [
+    "src/**/*.js",
+    "src/scripts/library.d.ts"
+  ]
 }

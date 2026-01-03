@@ -1,0 +1,16 @@
+style.
+    #loading {
+      border: none;
+      outline: none;
+      background: none;
+      color: white;
+    }
+
+    #loading::backdrop {
+      background: black;
+    }
+
+dialog(id="loading")
+    h1 loading...
+
+script document.querySelector("dialog#loading").showModal()

@@ -1,229 +1,164 @@
-async function startEditor(font) {
-    const editor = new BipsiEditor(font);
-    await editor.init();
+addEventListener("wheel", (event) => resizeOn = false);
+let resizeOn = true;
 
-    // used to show/hide elements in css
-    document.documentElement.setAttribute("data-app-mode", "editor");
+/**
+ * @param {HTMLElement} element 
+ * @param {boolean} integer
+ */
+function scaleElementToParent(element, integer = true) {
+  const parent = element.parentElement;
 
-    // no embedded project, start editor with save or editor embed
-    const save = await storage.load(SAVE_SLOT).catch(() => undefined);
-    const fallback = BIPSI_HD ? makeBlankBundle() :  maker.bundleFromHTML(document, "#editor-embed");
-    const bundle = save || fallback;
-    
-    // load bundle and enter editor mode
-    await editor.loadBundle(bundle);
+  const [tw, th] = [parent.clientWidth, parent.clientHeight];
+  const [sw, sh] = [tw / element.clientWidth, th / element.clientHeight];
+  let scale = Math.min(sw, sh);
+  scale = scale > 1 && integer ? Math.floor(scale) : scale;
 
-    // Auto-select the pointed-to event (upper-left corner)
-    editor.selectPointedEvent();
+  if (element.dataset.scale !== scale.toString()) {
+    element.dataset.scale = scale.toString();
+    element.style.setProperty("scale", `${scale}`);
+  }
 
-    // unsaved changes warning
-    window.addEventListener("beforeunload", (event) => {
-        if (!editor.unsavedChanges) return;
-        event.preventDefault();
-        return event.returnValue = "Are you sure you want to exit?";
-    });
-
-    return editor;
+  return scale;
 }
-
-async function makePlayback(font, bundle) {
-    const playback = new BipsiPlayback(font);
-    await playback.init();
-
-    const playCanvas = /** @type {HTMLCanvasElement} */ (ONE("#player-canvas"));
-    const playRendering = /** @type {CanvasRenderingContext2D} */ (playCanvas.getContext("2d"));
-
-    // need to override touch events for mobile
-    document.body.style.touchAction = "none";
-
-    // update the canvas size every render just in case..
-    playback.addEventListener("render", () => {
-        fillRendering2D(playRendering);
-        playRendering.drawImage(playback.rendering.canvas, 0, 0);
-        
-        scaleElementToParent(playCanvas.parentElement);
-
-        document.documentElement.style.setProperty('--vh', `${window.innerHeight / 100}px`);
-    });
-
-    // update the canvas size whenever the browser window resizes
-    window.addEventListener("resize", () => scaleElementToParent(playCanvas.parentElement));
-    
-    // update the canvas size initially
-    scaleElementToParent(playCanvas.parentElement);
-
-    let moveCooldown = 0;
-    const heldKeys = new Set();
-    const keys = new Map();
-    keys.set("ArrowLeft",  () => playback.move(-1,  0));
-    keys.set("ArrowRight", () => playback.move( 1,  0));
-    keys.set("ArrowUp",    () => playback.move( 0, -1));
-    keys.set("ArrowDown",  () => playback.move( 0,  1));
-
-    const keyToCode = new Map();
-    keyToCode.set("ArrowUp", "KeyW");
-    keyToCode.set("ArrowLeft", "KeyA");
-    keyToCode.set("ArrowDown", "KeyS");
-    keyToCode.set("ArrowRight", "KeyD");
-
-    function doMove(key) {
-        const move = keys.get(key);
-        if (move) {
-            move();
-            moveCooldown = .2;
-        }
-    }
-
-    let prev;
-    const timer = (next) => {
-        prev = prev ?? Date.now();
-        next = next ?? Date.now();
-        const dt = Math.max(0, (next - prev) / 1000.);
-        moveCooldown = Math.max(moveCooldown - dt, 0);
-        prev = next;
-        window.requestAnimationFrame(timer);
-
-        if (moveCooldown === 0) {
-            const key = Array.from(keys.keys()).find((key) => heldKeys.has(key) || heldKeys.has(keyToCode.get(key)));
-            if (key) doMove(key);
-        }
-
-        playback.update(dt);
-    }
-    timer();
-
-    function down(key, code) {
-        if (!playback.canMove) {
-            playback.proceed();
-        } else {
-            heldKeys.add(key);
-            heldKeys.add(code);
-            doMove(key);
-        }
-    }
-
-    function up(key, code) {
-        heldKeys.delete(key);
-        heldKeys.delete(code);
-    }
-
-    const turnToKey = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
-    let ignoreMouse = false;
-
-    window.onblur = () => setTimeout(() => ignoreMouse = true, 0);
-    window.onfocus = () => setTimeout(() => ignoreMouse = false, 0);
-
-    document.addEventListener("keydown", (event) => {
-        if (!event.repeat) down(event.key, event.code);
-        if (keys.has(event.key)) {
-            event.stopPropagation();
-            event.preventDefault();
-        }
-    }, { capture: true });
-    document.addEventListener("keyup", (event) => up(event.key, event.code));
-
-    document.addEventListener("pointerdown", (event) => {
-        if (ignoreMouse) return;
-
-        const threshold = playCanvas.getBoundingClientRect().width / ROOM_SIZE * 2;
-
-        const drag = ui.drag(event);
-        let [x0, y0] = [drag.downEvent.clientX, drag.downEvent.clientY];
-
-        playback.proceed();
-
-        drag.addEventListener("move", () => {
-            const [x1, y1] = [drag.lastEvent.clientX, drag.lastEvent.clientY];
-            const [dx, dy] = [x1 - x0, y1 - y0];
-
-            const dist = Math.max(Math.abs(dx), Math.abs(dy));
-            const angle = Math.atan2(dy, dx) + Math.PI * 2;
-            const turns = Math.round(angle / (Math.PI * .5)) % 4;
-            const nextKey = turnToKey[turns];
-
-            if (dist >= threshold) {
-                doMove(nextKey);
-                x0 = x1;
-                y0 = y1;
-            } 
-        });
-    });
-
-    async function captureGif() {
-        const giffer = window.open(
-            "https://kool.tools/tools/gif/",
-            "gif maker",
-            "left=10,top=10,width=512,height=512,resizable=no,location=no",
-        );
-        const frames = await recordFrames(playback);
-        sleep(500).then(() => giffer.postMessage({ name: "bipsi", frames }, "https://kool.tools"));
-    }
-
-    function getRoomListing() {
-        const current = getLocationOfEvent(playback.data, getEventById(playback.data, playback.avatarId));
-        const rooms = [];
-        const thumb = createRendering2D(ROOM_SIZE, ROOM_SIZE);
-        const preview = createRendering2D(ROOM_PX, ROOM_PX);
-        playback.data.rooms.forEach((room) => {
-            drawRoomPreviewPlayback(preview, playback, room.id);
-            drawRoomThumbPlayback(thumb, playback, room.id);
-            rooms.push({ id: room.id, thumb: thumb.canvas.toDataURL(), preview: preview.canvas.toDataURL() });
-        });
-        postMessageParent({ type: "room-listing", rooms, current }, "*");
-    }
-
-    /** @type {Map<string, (any) => void>} */
-    const debugHandlers = new Map();
-
-    debugHandlers.set("move-to", (message) => moveEventById(playback.data, playback.avatarId, message.destination));
-    debugHandlers.set("key-down", (message) => down(message.key, message.code));
-    debugHandlers.set("key-up", (message) => up(message.key, message.code));
-    debugHandlers.set("capture-gif", (message) => captureGif());
-    debugHandlers.set("get-room-listing", (message) => getRoomListing());
-
-    debugHandlers.set("touch-location", (message) => playback.touch(getEventAtLocation(playback.data, message.location)));
-    debugHandlers.set("touch-tagged", (message) => playback.touch(findEventByTag(playback.data, message.tag)));
-
-    // only allow these when playtesting from editor
-    if (document.documentElement.getAttribute("data-debug")) {
-        // if the game runs javascript from variables then this would be a 
-        // vector to run arbitrary javascript on the game's origin giving
-        // read/write access to storage for that origin and the power to e.g
-        // erase all game saves etc
-        debugHandlers.set("set-variable", (message) => playback.setVariable(message.key, message.value));
-    }
-
-    window.addEventListener("message", (event) => {
-        debugHandlers.get(event.data.type)?.call(this, event.data);
-    });
-
-    document.documentElement.setAttribute("data-app-mode", "player");
-    await playback.loadBundle(bundle);
-    playback.start();
-
-    return playback;
-}
-
-let PLAYBACK;
-let EDITOR;
 
 async function start() {
-    const font = null;
+  const renderer = new THREE.WebGLRenderer({ alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 
-    if (BIPSI_HD) document.documentElement.dataset.hd = "true";
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+  renderer.setAnimationLoop(animate);
 
-    // determine if there is a project bundle embedded in this page
-    const bundle = maker.bundleFromHTML(document);
+  function animate() {
+    renderer.render(scene, camera);
+  }
 
-    if (bundle) {
-        PLAYBACK = await makePlayback(font, bundle);
-        window.PLAYBACK = PLAYBACK;
-    } else {
-        EDITOR = await startEditor(font);
-        window.EDITOR = EDITOR;
+  const cube = new THREE.Mesh(
+    new THREE.BoxGeometry(),
+    new THREE.MeshBasicMaterial({ color: "red" }),
+  );
+  scene.add(cube);
 
-        // Run EDITOR code for all plugins
-        const editorCode = EDITOR.gatherPluginsJavascript([ "EDITOR" ]);
-        (new Function(editorCode))();
+  camera.position.set(1, 1, 1);
+  camera.lookAt(cube.position);
+
+  const { main, viewport,
+    dialogueElement,
+    dialogueBlockerElement,
+    dialogueContentElement,
+    dialoguePromptElement,
+  } = setup_ui(renderer.domElement);
+
+  function resize() {
+    // const parent = renderer.domElement.parentElement;
+    const rect = viewport.getBoundingClientRect();
+    let { left, top, width, height } = rect;
+
+    left = Math.ceil(left) + 2;
+    top = Math.ceil(top) + 2;
+    width = Math.floor(width) - 2;
+    height = Math.floor(height) - 2;
+
+    renderer.setSize(width, height, true);
+    renderer.setPixelRatio(1);
+    Object.assign(renderer.domElement.style, {
+      "left": `${left}px`,
+      "top": `${top}px`,
+    });
+
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+
+    Object.assign(camera, {
+      left: 0,
+      bottom: 0,
+      top: height,
+      right: width,
+    });
+    camera.updateProjectionMatrix();
+  }
+
+  function resize2() {
+    resize();
+    if (resizeOn) {
+      scaleElementToParent(main, false);
     }
+    requestAnimationFrame(resize2);
+  }
+  resize2();
+
+  /** @type {HTMLDialogElement} */
+  (document.querySelector("dialog#loading")).close();
+}
+
+function setup_dialogue_ui() {
+  const dialogueBlockerElement = html("div", { id: "dialogue-blocker", hidden: "" });
+  const dialogueContentElement = html("div");
+  dialogueContentElement.style.whiteSpace = "pre-wrap";
+  const dialoguePromptElement = html("div", {}, "🔽");
+  dialoguePromptElement.style = `
+        position: absolute;
+        left: 50%;
+        transform: translate(-50%, .125rem);
+        animation: 1s ease-in-out infinite alternate flash;`
+  const dialogueElement = html("div", { id: "dialogue", class: "ui-border ui-dialogue", hidden: "" }, dialogueContentElement, dialoguePromptElement);
+
+  return {
+    dialogueElement,
+    dialogueBlockerElement,
+    dialogueContentElement,
+    dialoguePromptElement,
+  }
+}
+
+function setup_ui(canvas) {
+  Object.assign(canvas.style, {
+    "position": "absolute",
+    "z-index": "-1",
+    "border-radius": "1rem",
+    "pointer-events": "all",
+  });
+  document.body.append(canvas);
+
+  const viewport = html("div", { id: "viewport" });
+  viewport.style.gridArea = "viewport";
+
+  const border = html("div", { class: "ui-border" });
+  border.style.gridArea = "viewport";
+
+  const {
+    dialogueElement,
+    dialogueBlockerElement,
+    dialogueContentElement,
+    dialoguePromptElement,
+  } = setup_dialogue_ui();
+
+  const main = html(
+    "main",
+    { class: "centered" },
+    viewport,
+    border,
+
+    dialogueElement,
+    dialogueBlockerElement,
+  );
+  Object.assign(main.style, {
+    "width": "480px",
+    "height": "768px",
+  });
+  Object.assign(main.style, {
+    "display": "grid",
+    "grid-template": `"viewport" 1fr "controls" min-content`,
+  });
+  document.body.append(main);
+
+  return {
+    main,
+    viewport,
+
+    dialogueElement,
+    dialogueBlockerElement,
+    dialogueContentElement,
+    dialoguePromptElement,
+  }
 }

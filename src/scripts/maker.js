@@ -746,8 +746,8 @@ function trackCanvasStroke(canvas, drag) {
     return positions;
 }
 
-// from https://github.com/ai/nanoid/blob/master/non-secure/index.js
-const urlAlphabet = 'ModuleSymbhasOwnPr-0123456789ABCDEFGHNRVfgctiUvz_KqYTJkLxpZXIjQW';
+// from https://github.com/ai/nanoid/blob/main/non-secure/index.js
+const urlAlphabet = 'useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict';
 function nanoid(size = 21) {
     let id = '';
     let i = size;
