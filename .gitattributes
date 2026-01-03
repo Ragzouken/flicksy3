@@ -1,0 +1,4 @@
+# tell github what's our code
+*.min.js linguist-vendored
+*.md linguist-detectable
+*.pug linguist-detectable
