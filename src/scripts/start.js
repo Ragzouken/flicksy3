@@ -44,13 +44,15 @@ async function start() {
   function animate() {
     resize();
 
-    skybox.rotation.y = Math.PI * 2 * (performance.now() * .0001);
+    // skybox.rotation.y = Math.PI * 2 * (performance.now() * .0001);
 
     renderer.render(scene, camera);
   }
 
   const img = document.querySelector("img");
   img.remove();
+
+  await imageLoadWaiter(img);
 
   const skyboxRendering = createRendering2D(256, 256);
   skyboxRendering.drawImage(img, 0, 0);
@@ -99,7 +101,7 @@ async function start() {
    */
   function eventToTexturePixels(event, vector) {
     vector.copy(mouseEventToCanvasClipCoords(renderer.domElement, event));
-    
+
     raycaster.setFromCamera(vector, camera);
     const [first] = raycaster.intersectObject(skybox);
 
@@ -114,6 +116,8 @@ async function start() {
     return true;
   }
 
+  skyboxRendering.fillStyle = "red";
+
   renderer.domElement.addEventListener("pointerdown", (event) => {
     const drag = ui.drag(event);
 
@@ -122,8 +126,6 @@ async function start() {
 
     function drawLine() {
       const s = 2;
-
-      skyboxRendering.fillStyle = "red";
 
       lineplot(p0.x, p0.y, p1.x, p1.y, (x, y) => {
         skyboxRendering.fillRect(
@@ -163,7 +165,30 @@ async function start() {
   let activeControls = html("fieldset");
   let prevControls;
 
+  function add_button(controls, label, callback = () => { }) {
+    const button = document.createElement("button");
+    button.textContent = label;
+    button.addEventListener("click", callback);
+    button.classList.add("ui-border");
+    controls.append(button);
+    return button;
+  }
+
   const moveControls = make_grid_controls();
+
+  add_button(moveControls, "🎨", () => skyboxRendering.fillStyle = `hsl(${Math.random()*360}deg 75 50)`);
+  const move = add_button(moveControls, "🔄️");
+
+  move.addEventListener("pointerdown", (event) => {
+    const drag = ui.drag(event);
+    drag.addEventListener("move", (event) => {
+      const pointer = /** @type {PointerEvent} */ (event.detail);
+
+      skybox.rotation.y += pointer.movementX * 0.01;
+      skybox.rotation.x += pointer.movementY * 0.01;
+    });
+  });
+
   SET_CONTROLS(moveControls);
   // SET_CONTROLS(choice_test);
 
