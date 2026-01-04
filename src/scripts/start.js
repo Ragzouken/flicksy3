@@ -1,3 +1,111 @@
+globalThis.SETUP = {};
+
+async function start() {
+  const renderer = new THREE.WebGLRenderer({ alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+  renderer.setAnimationLoop(animate);
+
+  function resize() {
+    if (resizeOn) {
+      scaleElementToParent(main, false);
+    }
+
+    const rect = viewport.getBoundingClientRect();
+    let { left, top, width, height } = rect;
+
+    const padding = 2;
+
+    left = Math.ceil(left) + padding;
+    top = Math.ceil(top) + padding;
+    width = Math.floor(width) - padding*2;
+    height = Math.floor(height) - padding*2;
+
+    renderer.setSize(width, height, true);
+    renderer.setPixelRatio(1);
+    Object.assign(renderer.domElement.style, {
+      "left": `${left}px`,
+      "top": `${top}px`,
+    });
+
+    camera.aspect = width / height;
+
+    Object.assign(camera, {
+      left: 0,
+      bottom: 0,
+      top: height,
+      right: width,
+    });
+    camera.updateProjectionMatrix();
+  }
+
+  function animate() {
+    resize();
+
+    skybox.rotation.y = Math.PI * 2 * (performance.now() * .0001);
+
+    renderer.render(scene, camera);
+  }
+
+  const img = document.querySelector("img");
+  img.remove();
+
+  const skyboxRendering = createRendering2D(256, 256);
+  skyboxRendering.drawImage(img, 0, 0);
+
+  const skyboxTex = new THREE.Texture(skyboxRendering.canvas);
+  const skyboxGeo = new THREE.IcosahedronGeometry();
+  const skyboxMat = new THREE.MeshBasicMaterial({ map: skyboxTex, side: THREE.BackSide, alphaTest: .5 });
+  const skybox = new THREE.Mesh(skyboxGeo, skyboxMat);
+
+  skyboxTex.minFilter = THREE.NearestFilter;
+  skyboxTex.magFilter = THREE.NearestFilter;
+  skyboxTex.wrapS = THREE.RepeatWrapping;
+  skyboxTex.wrapT = THREE.RepeatWrapping;
+  skyboxTex.needsUpdate = true;
+  skyboxMat.needsUpdate = true;
+
+  scene.add(skybox);
+
+  camera.position.set(0, 0, 0);
+  camera.lookAt(skybox.position);
+
+  const { main, viewport,
+    dialogueElement,
+    dialogueBlockerElement,
+    dialogueContentElement,
+    dialoguePromptElement,
+  } = setup_ui(renderer.domElement);
+
+  function make_grid_controls(cols = 3, rows = 3) {
+    const controls = html("fieldset", { class: "editor" });
+    Object.assign(controls.style, {
+      "grid-template-columns": `repeat(${cols}, 1fr)`,
+      "grid-template-rows": `repeat(${rows}, 1fr)`,
+    });
+    return controls;
+  }
+
+  let activeControls = html("fieldset");
+  let prevControls;
+
+  const moveControls = make_grid_controls();
+  SET_CONTROLS(moveControls);
+  // SET_CONTROLS(choice_test);
+
+  function SET_CONTROLS(controls) {
+    prevControls = activeControls;
+    activeControls.remove();
+    activeControls = controls;
+    main.append(activeControls);
+  }
+
+  /** @type {HTMLDialogElement} */
+  (document.querySelector("dialog#loading")).close();
+}
+
 addEventListener("wheel", (event) => resizeOn = false);
 let resizeOn = true;
 
@@ -19,76 +127,6 @@ function scaleElementToParent(element, integer = true) {
   }
 
   return scale;
-}
-
-async function start() {
-  const renderer = new THREE.WebGLRenderer({ alpha: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
-  renderer.setAnimationLoop(animate);
-
-  function animate() {
-    renderer.render(scene, camera);
-  }
-
-  const cube = new THREE.Mesh(
-    new THREE.BoxGeometry(),
-    new THREE.MeshBasicMaterial({ color: "red" }),
-  );
-  scene.add(cube);
-
-  camera.position.set(1, 1, 1);
-  camera.lookAt(cube.position);
-
-  const { main, viewport,
-    dialogueElement,
-    dialogueBlockerElement,
-    dialogueContentElement,
-    dialoguePromptElement,
-  } = setup_ui(renderer.domElement);
-
-  function resize() {
-    // const parent = renderer.domElement.parentElement;
-    const rect = viewport.getBoundingClientRect();
-    let { left, top, width, height } = rect;
-
-    left = Math.ceil(left) + 2;
-    top = Math.ceil(top) + 2;
-    width = Math.floor(width) - 2;
-    height = Math.floor(height) - 2;
-
-    renderer.setSize(width, height, true);
-    renderer.setPixelRatio(1);
-    Object.assign(renderer.domElement.style, {
-      "left": `${left}px`,
-      "top": `${top}px`,
-    });
-
-    camera.aspect = width / height;
-    camera.updateProjectionMatrix();
-
-    Object.assign(camera, {
-      left: 0,
-      bottom: 0,
-      top: height,
-      right: width,
-    });
-    camera.updateProjectionMatrix();
-  }
-
-  function resize2() {
-    resize();
-    if (resizeOn) {
-      scaleElementToParent(main, false);
-    }
-    requestAnimationFrame(resize2);
-  }
-  resize2();
-
-  /** @type {HTMLDialogElement} */
-  (document.querySelector("dialog#loading")).close();
 }
 
 function setup_dialogue_ui() {
