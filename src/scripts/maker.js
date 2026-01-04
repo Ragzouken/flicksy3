@@ -736,6 +736,18 @@ ui.drag = (event) => new ui.PointerDrag(event);
 
 /**
  * @param {HTMLCanvasElement} canvas 
+ * @param {MouseEvent} event 
+ */
+ function mouseEventToCanvasClipCoords(canvas, event) {
+    const bounds = canvas.getBoundingClientRect();
+    const [mx, my] = [event.clientX - bounds.x, event.clientY - bounds.y];
+    const [sx, sy] = [1 / canvas.clientWidth, 1 / canvas.clientHeight]; 
+    const [cx, cy] = [mx * sx * 2 - 1, my * sy * 2 - 1];
+    return { x: cx, y: cy * -1 };
+}
+
+/**
+ * @param {HTMLCanvasElement} canvas 
  * @param {ui.PointerDrag} drag 
  */
 function trackCanvasStroke(canvas, drag) {

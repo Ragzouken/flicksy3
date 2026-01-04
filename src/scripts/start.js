@@ -20,8 +20,8 @@ async function start() {
 
     left = Math.ceil(left) + padding;
     top = Math.ceil(top) + padding;
-    width = Math.floor(width) - padding*2;
-    height = Math.floor(height) - padding*2;
+    width = Math.floor(width) - padding * 2;
+    height = Math.floor(height) - padding * 2;
 
     renderer.setSize(width, height, true);
     renderer.setPixelRatio(1);
@@ -78,6 +78,78 @@ async function start() {
     dialogueContentElement,
     dialoguePromptElement,
   } = setup_ui(renderer.domElement);
+
+  const raycaster = new THREE.Raycaster();
+
+  /**
+   * @param {PointerEvent} event 
+   * @param {THREE.Vector2} vector 
+   * @returns {THREE.Vector2}
+   */
+  function eventToClipCoords(event, vector) {
+    const { x, y } = mouseEventToCanvasClipCoords(renderer.domElement, event);
+    vector.set(x, y);
+    return vector;
+  }
+
+  /**
+   * @param {PointerEvent} event 
+   * @param {THREE.Vector2} vector 
+   * @returns {boolean}
+   */
+  function eventToTexturePixels(event, vector) {
+    vector.copy(mouseEventToCanvasClipCoords(renderer.domElement, event));
+    
+    raycaster.setFromCamera(vector, camera);
+    const [first] = raycaster.intersectObject(skybox);
+
+    if (!first?.uv)
+      return false;
+
+    const x = (2 + first.uv.x) % 1;
+    const y = (2 - first.uv.y) % 1;
+    const { width: w, height: h } = skyboxRendering.canvas;
+    vector.set(Math.round(x * w), Math.round(y * h));
+
+    return true;
+  }
+
+  renderer.domElement.addEventListener("pointerdown", (event) => {
+    const drag = ui.drag(event);
+
+    const p0 = new THREE.Vector2();
+    const p1 = new THREE.Vector2();
+
+    function drawLine() {
+      const s = 2;
+
+      skyboxRendering.fillStyle = "red";
+
+      lineplot(p0.x, p0.y, p1.x, p1.y, (x, y) => {
+        skyboxRendering.fillRect(
+          x - ((s / 2) | 0),
+          y - ((s / 2) | 0),
+          s,
+          s,
+        );
+      });
+
+      skyboxTex.needsUpdate = true;
+      skyboxMat.needsUpdate = true;
+    }
+
+    eventToTexturePixels(event, p1);
+    p0.copy(p1);
+
+    drag.addEventListener("move", (event) => {
+      eventToTexturePixels(event.detail, p1);
+
+      if (p0.distanceTo(p1) < 32)
+        drawLine();
+
+      p0.copy(p1);
+    });
+  });
 
   function make_grid_controls(cols = 3, rows = 3) {
     const controls = html("fieldset", { class: "editor" });
