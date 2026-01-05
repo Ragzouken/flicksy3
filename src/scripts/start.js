@@ -6,7 +6,26 @@ async function start() {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
-  renderer.setAnimationLoop(animate);
+
+  /** @type {maker.StateManager<Flicksy3DataProject>} */
+  const stateManager = new maker.StateManager(getManifest);
+
+  // no embedded project, start editor with save or editor embed
+  const save = await storage.load(SAVE_SLOT).catch(() => undefined);
+  const fallback = makeBlankBundle(); //: maker.bundleFromHTML(document, "#editor-embed");
+  const bundle = save ?? fallback;
+
+  // load bundle and enter editor mode
+  await stateManager.loadBundle(bundle);
+
+  stateManager.addEventListener("change", async (event) => {
+    undoButton.disabled = !stateManager.canUndo;
+    redoButton.disabled = !stateManager.canRedo;
+
+    skyboxTex.image = (await stateManager.resources.get(stateManager.present.scenes[0].texture)).canvas;
+    skyboxTex.needsUpdate = true;
+    skyboxMat.needsUpdate = true;
+  });
 
   function resize() {
     if (resizeOn) {
@@ -44,18 +63,11 @@ async function start() {
   function animate() {
     resize();
 
-    // skybox.rotation.y = Math.PI * 2 * (performance.now() * .0001);
-
     renderer.render(scene, camera);
   }
 
-  const img = document.querySelector("img");
-  img.remove();
-
-  await imageLoadWaiter(img);
-
-  const skyboxRendering = createRendering2D(256, 256);
-  skyboxRendering.drawImage(img, 0, 0);
+  const texId = stateManager.present.scenes[0].texture;
+  const skyboxRendering = /** @type {CanvasRenderingContext2D} */ (stateManager.resources.get(texId));
 
   const skyboxTex = new THREE.Texture(skyboxRendering.canvas);
   const skyboxGeo = new THREE.IcosahedronGeometry();
@@ -86,17 +98,6 @@ async function start() {
   /**
    * @param {PointerEvent} event 
    * @param {THREE.Vector2} vector 
-   * @returns {THREE.Vector2}
-   */
-  function eventToClipCoords(event, vector) {
-    const { x, y } = mouseEventToCanvasClipCoords(renderer.domElement, event);
-    vector.set(x, y);
-    return vector;
-  }
-
-  /**
-   * @param {PointerEvent} event 
-   * @param {THREE.Vector2} vector 
    * @returns {boolean}
    */
   function eventToTexturePixels(event, vector) {
@@ -118,7 +119,21 @@ async function start() {
 
   skyboxRendering.fillStyle = "red";
 
-  renderer.domElement.addEventListener("pointerdown", (event) => {
+  let currentColor = "black";
+
+  renderer.domElement.addEventListener("pointerdown", async (event) => {
+    stateManager.makeCheckpoint();
+
+    const prevID = stateManager.present.scenes[0].texture;
+    const { id: nextID, instance } = await stateManager.resources.fork(prevID);
+    stateManager.present.scenes[0].texture = nextID;
+    
+    skyboxTex.image = instance.canvas;
+    skyboxTex.needsUpdate = true;
+    skyboxMat.needsUpdate = true;
+
+    instance.fillStyle = currentColor;
+
     const drag = ui.drag(event);
 
     const p0 = new THREE.Vector2();
@@ -128,7 +143,7 @@ async function start() {
       const s = 2;
 
       lineplot(p0.x, p0.y, p1.x, p1.y, (x, y) => {
-        skyboxRendering.fillRect(
+        instance.fillRect(
           x - ((s / 2) | 0),
           y - ((s / 2) | 0),
           s,
@@ -151,6 +166,8 @@ async function start() {
 
       p0.copy(p1);
     });
+
+    drag.addEventListener("up", (event) => stateManager.changed());
   });
 
   function make_grid_controls(cols = 3, rows = 3) {
@@ -176,10 +193,15 @@ async function start() {
 
   const moveControls = make_grid_controls();
 
-  add_button(moveControls, "🎨", () => skyboxRendering.fillStyle = `hsl(${Math.random()*360}deg 75 50)`);
-  const move = add_button(moveControls, "🔄️");
+  add_button(moveControls, "🎨", () => currentColor = `hsl(${Math.random() * 360}deg 75 50)`);
+  const lookButton = add_button(moveControls, "🔄️");
+  add_button(moveControls, "").style.visibility = "hidden";
 
-  move.addEventListener("pointerdown", (event) => {
+  const undoButton = add_button(moveControls, "↩️", () => stateManager.undo());
+  const saveButton = add_button(moveControls, "💾", () => stateManager.makeBundle().then((data) => storage.save(data, SAVE_SLOT)));
+  const redoButton = add_button(moveControls, "↪️", () => stateManager.redo());
+
+  lookButton.addEventListener("pointerdown", (event) => {
     const drag = ui.drag(event);
     drag.addEventListener("move", (event) => {
       const pointer = /** @type {PointerEvent} */ (event.detail);
@@ -201,6 +223,10 @@ async function start() {
 
   /** @type {HTMLDialogElement} */
   (document.querySelector("dialog#loading")).close();
+
+  renderer.setAnimationLoop(animate);
+
+  stateManager.changed();
 }
 
 addEventListener("wheel", (event) => resizeOn = false);

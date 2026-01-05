@@ -77,6 +77,13 @@ button.active2 {
   filter: brightness(50%);
 }
 
+button:disabled {
+  cursor: not-allowed;
+  filter: brightness(50%);
+
+  /* pointer-events: none; */
+}
+
 .ui-border {
   border: solid white .5rem;
   border-left-color: grey;
