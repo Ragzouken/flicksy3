@@ -123,6 +123,7 @@ async function start() {
   skyboxRendering.fillStyle = "red";
 
   let currentColor = "black";
+  let currentSize = 2;
 
   renderer.domElement.addEventListener("pointerdown", async (event) => {
     stateManager.makeCheckpoint();
@@ -143,7 +144,7 @@ async function start() {
     const p1 = new THREE.Vector2();
 
     function drawLine() {
-      const s = 2;
+      const s = currentSize;
 
       lineplot(p0.x, p0.y, p1.x, p1.y, (x, y) => {
         instance.fillRect(
@@ -196,15 +197,33 @@ async function start() {
 
   const moveControls = make_grid_controls();
 
-  add_button(moveControls, "🎨", () => currentColor = `hsl(${Math.random() * 360}deg 75 50)`);
+  const colorButton = add_button(moveControls, "🎨", () => {
+    currentColor = `hsl(${Math.random() * 360}deg 75 50)`;
+    colorButton.style.background = currentColor;
+  });
+  colorButton.style.background = currentColor;
+
   const lookButton = add_button(moveControls, "🔄️");
-  add_button(moveControls, "").style.visibility = "hidden";
+
+  const brushButton = add_button(moveControls, "2", () => {
+    currentSize = Math.max((currentSize + 1) % 6, 1); 
+    brushButton.textContent = `${currentSize}`;
+  });
+  brushButton.textContent = `${currentSize}`;
 
   const undoButton = add_button(moveControls, "↩️", () => stateManager.undo());
   const saveButton = add_button(moveControls, "💾", () => stateManager.makeBundle().then((data) => storage.save(data, SAVE_SLOT)));
   const redoButton = add_button(moveControls, "↪️", () => stateManager.redo());
 
   add_button(moveControls, "📦", runExport);
+  add_button(moveControls, "📥", runImport);
+
+  async function runImport() {
+    const [file] = await maker.pickFiles("*.html");
+    const html = await maker.textFromFile(file).then(maker.htmlFromText);
+    const bundle = maker.bundleFromHTML(html);
+    await stateManager.loadBundle(bundle);
+  }
 
   async function runExport() {
     // prompt the browser to download the page
