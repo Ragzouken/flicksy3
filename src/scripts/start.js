@@ -76,6 +76,7 @@ async function start() {
   const skyboxMat = new THREE.MeshBasicMaterial({ map: skyboxTex, side: THREE.BackSide, alphaTest: .5 });
   const skybox = new THREE.Mesh(skyboxGeo, skyboxMat);
 
+  skyboxTex.colorSpace = THREE.SRGBColorSpace;
   skyboxTex.minFilter = THREE.NearestFilter;
   skyboxTex.magFilter = THREE.NearestFilter;
   skyboxTex.wrapS = THREE.RepeatWrapping;
@@ -198,7 +199,7 @@ async function start() {
   const moveControls = make_grid_controls();
 
   const colorButton = add_button(moveControls, "🎨", () => {
-    currentColor = `hsl(${Math.random() * 360}deg 75 50)`;
+    currentColor = `hsl(${Math.random() * 360}deg 85 75)`;
     colorButton.style.background = currentColor;
   });
   colorButton.style.background = currentColor;
