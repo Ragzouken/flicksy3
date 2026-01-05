@@ -255,6 +255,8 @@ async function start() {
 
       skybox.rotation.y += pointer.movementX * 0.01;
       skybox.rotation.x += pointer.movementY * 0.01;
+
+      skybox.rotation.x = Math.max(-Math.PI/2, Math.min(skybox.rotation.x, Math.PI/2));
     });
   });
 
