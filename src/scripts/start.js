@@ -10,10 +10,12 @@ async function start() {
   /** @type {maker.StateManager<Flicksy3DataProject>} */
   const stateManager = new maker.StateManager(getManifest);
 
+  const embed = maker.bundleFromHTML(document);
+
   // no embedded project, start editor with save or editor embed
   const save = await storage.load(SAVE_SLOT).catch(() => undefined);
   const fallback = makeBlankBundle(); //: maker.bundleFromHTML(document, "#editor-embed");
-  const bundle = save ?? fallback;
+  const bundle = embed ?? save ?? fallback;
 
   // load bundle and enter editor mode
   await stateManager.loadBundle(bundle);
@@ -92,6 +94,7 @@ async function start() {
     dialogueContentElement,
     dialoguePromptElement,
   } = setup_ui(renderer.domElement);
+  main.setAttribute("data-editor-only", "");
 
   const raycaster = new THREE.Raycaster();
 
@@ -127,7 +130,7 @@ async function start() {
     const prevID = stateManager.present.scenes[0].texture;
     const { id: nextID, instance } = await stateManager.resources.fork(prevID);
     stateManager.present.scenes[0].texture = nextID;
-    
+
     skyboxTex.image = instance.canvas;
     skyboxTex.needsUpdate = true;
     skyboxMat.needsUpdate = true;
@@ -200,6 +203,31 @@ async function start() {
   const undoButton = add_button(moveControls, "↩️", () => stateManager.undo());
   const saveButton = add_button(moveControls, "💾", () => stateManager.makeBundle().then((data) => storage.save(data, SAVE_SLOT)));
   const redoButton = add_button(moveControls, "↪️", () => stateManager.redo());
+
+  add_button(moveControls, "📦", runExport);
+
+  async function runExport() {
+    // prompt the browser to download the page
+    const name = "flicksy3.html";
+    const blob = maker.textToBlob(await makeExportHTML(), "text/html");
+    maker.saveAs(blob, name);
+  }
+
+  async function makeExportHTML() {
+    // make a standalone bundle of the current project state and the 
+    // resources it depends upon
+    const bundle = await stateManager.makeBundle();
+
+    // make a copy of this web page
+    const clone = /** @type {HTMLElement} */ (document.documentElement.cloneNode(true));
+    // remove some unwanted elements from the page copy
+    ALL("[data-empty]", clone).forEach((element) => element.replaceChildren());
+    ALL("[data-editor-only]", clone).forEach((element) => element.remove());
+    // insert the project bundle data into the page copy 
+    ONE("#bundle-embed", clone).innerHTML = JSON.stringify(bundle);
+
+    return `<!DOCTYPE html>${clone.outerHTML}`;
+  }
 
   lookButton.addEventListener("pointerdown", (event) => {
     const drag = ui.drag(event);
