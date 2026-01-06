@@ -126,7 +126,7 @@ async function start() {
 
     /** @type {CanvasRenderingContext2D} */
     let instance = stateManager.resources.get(prevID);
-    
+
     const picking_ = picking;
 
     if (!picking_) {
@@ -166,6 +166,10 @@ async function start() {
     eventToTexturePixels(event, p1);
     p0.copy(p1);
 
+    const color = new Uint32Array(instance.getImageData(p1.x, p1.y, 1, 1).data.buffer);
+    currentColor = rgbToHex(uint32ToRGB(color));
+    colorButton.style.background = currentColor;
+
     drag.addEventListener("move", (event) => {
       eventToTexturePixels(event.detail, p1);
 
@@ -186,7 +190,7 @@ async function start() {
         stateManager.changed();
       } else {
         picking = false;
-      } 
+      }
     });
   });
 
@@ -253,7 +257,7 @@ async function start() {
     saveButton.disabled = true;
     await stateManager.makeBundle().then((data) => storage.save(data, SAVE_SLOT));
     saveButton.disabled = false;
-  } 
+  }
 
   const saveButton = add_button(moveControls, "💾", doSave);
   add_button(moveControls, "📦", runExport);
@@ -297,7 +301,7 @@ async function start() {
       skybox.rotation.y += pointer.movementX * 0.01;
       skybox.rotation.x += pointer.movementY * 0.01;
 
-      skybox.rotation.x = Math.max(-Math.PI/2, Math.min(skybox.rotation.x, Math.PI/2));
+      skybox.rotation.x = Math.max(-Math.PI / 2, Math.min(skybox.rotation.x, Math.PI / 2));
     });
   });
 
