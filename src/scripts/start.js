@@ -89,12 +89,7 @@ async function start() {
   camera.position.set(0, 0, 0);
   camera.lookAt(skybox.position);
 
-  const { main, viewport,
-    dialogueElement,
-    dialogueBlockerElement,
-    dialogueContentElement,
-    dialoguePromptElement,
-  } = setup_ui(renderer.domElement);
+  const { main, viewport, brushPopover } = setup_ui(renderer.domElement);
   main.setAttribute("data-editor-only", "");
 
   const raycaster = new THREE.Raycaster();
@@ -216,6 +211,20 @@ async function start() {
     return button;
   }
 
+  function set_current_size(size) {
+    currentSize = size;
+    brushButton.textContent = `${size}`;
+  }
+
+  const brushControls = make_grid_controls(3, 2);
+  brushControls.style.height = "128px";
+  brushControls.style.width = "256px";
+  brushControls.style.padding = "0";
+  for (let i = 1; i <= 6; ++i) {
+    add_button(brushControls, `${i}`, () => set_current_size(i));
+  }
+  brushPopover.appendChild(brushControls);
+
   const moveControls = make_grid_controls();
 
   let picking = false;
@@ -228,11 +237,9 @@ async function start() {
   const pickButton = add_button(moveControls, "💉", () => {
     picking = !picking;
   });
-  const brushButton = add_button(moveControls, "2", () => {
-    currentSize = Math.max((currentSize + 1) % 6, 1); 
-    brushButton.textContent = `${currentSize}`;
-  });
-  brushButton.textContent = `${currentSize}`;
+  const brushButton = add_button(moveControls, `${currentSize}`);
+
+  brushButton.setAttribute("popovertarget", "popover-brush");
 
   const undoButton = add_button(moveControls, "↩️", () => stateManager.undo());
   const lookButton = add_button(moveControls, "👁️");
@@ -366,6 +373,9 @@ function setup_ui(canvas) {
   const border = html("div", { class: "ui-border" });
   border.style.gridArea = "viewport";
 
+  const brushPopover = html("div", { popover: "", class: "ui-border", id: "popover-brush" });
+  brushPopover.style.background = "black";
+
   const {
     dialogueElement,
     dialogueBlockerElement,
@@ -378,6 +388,7 @@ function setup_ui(canvas) {
     { class: "centered" },
     viewport,
     border,
+    brushPopover,
 
     dialogueElement,
     dialogueBlockerElement,
@@ -400,5 +411,7 @@ function setup_ui(canvas) {
     dialogueBlockerElement,
     dialogueContentElement,
     dialoguePromptElement,
+
+    brushPopover,
   }
 }
