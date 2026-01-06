@@ -127,17 +127,25 @@ async function start() {
   let currentSize = 2;
 
   renderer.domElement.addEventListener("pointerdown", async (event) => {
-    stateManager.makeCheckpoint();
-
     const prevID = stateManager.present.scenes[0].texture;
-    const { id: nextID, instance } = await stateManager.resources.fork(prevID);
-    stateManager.present.scenes[0].texture = nextID;
 
-    skyboxTex.image = instance.canvas;
-    skyboxTex.needsUpdate = true;
-    skyboxMat.needsUpdate = true;
+    /** @type {CanvasRenderingContext2D} */
+    let instance = stateManager.resources.get(prevID);
+    
+    const picking_ = picking;
 
-    instance.fillStyle = currentColor;
+    if (!picking_) {
+      stateManager.makeCheckpoint();
+      const fork = await stateManager.resources.fork(prevID);
+      stateManager.present.scenes[0].texture = fork.id;
+      instance = fork.instance;
+
+      skyboxTex.image = instance.canvas;
+      skyboxTex.needsUpdate = true;
+      skyboxMat.needsUpdate = true;
+
+      instance.fillStyle = currentColor;
+    }
 
     const drag = ui.drag(event);
 
@@ -166,13 +174,25 @@ async function start() {
     drag.addEventListener("move", (event) => {
       eventToTexturePixels(event.detail, p1);
 
-      if (p0.distanceTo(p1) < 32)
-        drawLine();
+      if (!picking_) {
+        if (p0.distanceTo(p1) < 32)
+          drawLine();
+      } else {
+        const color = new Uint32Array(instance.getImageData(p1.x, p1.y, 1, 1).data.buffer);
+        currentColor = rgbToHex(uint32ToRGB(color));
+        colorButton.style.background = currentColor;
+      }
 
       p0.copy(p1);
     });
 
-    drag.addEventListener("up", (event) => stateManager.changed());
+    drag.addEventListener("up", (event) => {
+      if (!picking_) {
+        stateManager.changed();
+      } else {
+        picking = false;
+      } 
+    });
   });
 
   function make_grid_controls(cols = 3, rows = 3) {
@@ -198,14 +218,16 @@ async function start() {
 
   const moveControls = make_grid_controls();
 
+  let picking = false;
+
   const colorButton = add_button(moveControls, "🎨", () => {
     currentColor = `hsl(${Math.random() * 360}deg 85 75)`;
     colorButton.style.background = currentColor;
   });
   colorButton.style.background = currentColor;
-
-  const lookButton = add_button(moveControls, "🔄️");
-
+  const pickButton = add_button(moveControls, "💉", () => {
+    picking = !picking;
+  });
   const brushButton = add_button(moveControls, "2", () => {
     currentSize = Math.max((currentSize + 1) % 6, 1); 
     brushButton.textContent = `${currentSize}`;
@@ -213,9 +235,16 @@ async function start() {
   brushButton.textContent = `${currentSize}`;
 
   const undoButton = add_button(moveControls, "↩️", () => stateManager.undo());
-  const saveButton = add_button(moveControls, "💾", () => stateManager.makeBundle().then((data) => storage.save(data, SAVE_SLOT)));
+  const lookButton = add_button(moveControls, "👁️");
   const redoButton = add_button(moveControls, "↪️", () => stateManager.redo());
 
+  async function doSave() {
+    saveButton.disabled = true;
+    await stateManager.makeBundle().then((data) => storage.save(data, SAVE_SLOT));
+    saveButton.disabled = false;
+  } 
+
+  const saveButton = add_button(moveControls, "💾", doSave);
   add_button(moveControls, "📦", runExport);
   add_button(moveControls, "📥", runImport);
 
