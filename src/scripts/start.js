@@ -214,14 +214,14 @@ async function start() {
   function set_current_size(size) {
     currentSize = size;
     brushButton.textContent = `${size}`;
+    brushPopover.hidden = true;
   }
 
   const brushControls = make_grid_controls(3, 2);
   brushControls.style.height = "128px";
-  brushControls.style.width = "256px";
   brushControls.style.padding = "0";
   for (let i = 1; i <= 6; ++i) {
-    add_button(brushControls, `${i}`, () => set_current_size(i));
+    add_button(brushControls, `${i}`, (event) => set_current_size(i));
   }
   brushPopover.appendChild(brushControls);
 
@@ -237,9 +237,13 @@ async function start() {
   const pickButton = add_button(moveControls, "💉", () => {
     picking = !picking;
   });
-  const brushButton = add_button(moveControls, `${currentSize}`);
-
-  brushButton.setAttribute("popovertarget", "popover-brush");
+  const brushButton = add_button(moveControls, `${currentSize}`, (event) => {
+    brushPopover.hidden = !brushPopover.hidden;
+    document.addEventListener("pointerdown", (event) => {
+      if (!brushPopover.contains(event.target) && !brushButton.contains(event.target))
+        brushPopover.hidden = true;
+    }, { once: true });
+  });
 
   const undoButton = add_button(moveControls, "↩️", () => stateManager.undo());
   const lookButton = add_button(moveControls, "👁️");
@@ -373,8 +377,11 @@ function setup_ui(canvas) {
   const border = html("div", { class: "ui-border" });
   border.style.gridArea = "viewport";
 
-  const brushPopover = html("div", { popover: "", class: "ui-border", id: "popover-brush" });
+  const brushPopover = html("div", { class: "ui-border", id: "popover-brush", hidden: "" });
   brushPopover.style.background = "black";
+  brushPopover.style.gridArea = "viewport";
+  brushPopover.style.alignSelf = "end";
+  brushPopover.style.padding = ".5rem";
 
   const {
     dialogueElement,
