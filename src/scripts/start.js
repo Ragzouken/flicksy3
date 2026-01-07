@@ -20,6 +20,12 @@ async function start() {
   // load bundle and enter editor mode
   await stateManager.loadBundle(bundle);
 
+  const palette = [];
+
+  for (let i = 0; i < 16; ++i) {
+    palette.push(rgbToHex(HSVToRGB({ h: i / 16, s: .75, v: 1.0 })));
+  }
+
   stateManager.addEventListener("change", async (event) => {
     undoButton.disabled = !stateManager.canUndo;
     redoButton.disabled = !stateManager.canRedo;
@@ -89,7 +95,7 @@ async function start() {
   camera.position.set(0, 0, 0);
   camera.lookAt(skybox.position);
 
-  const { main, viewport, brushPopover } = setup_ui(renderer.domElement);
+  const { main, viewport, brushPopover, colorPopover } = setup_ui(renderer.domElement);
   main.setAttribute("data-editor-only", "");
 
   const raycaster = new THREE.Raycaster();
@@ -118,7 +124,7 @@ async function start() {
 
   skyboxRendering.fillStyle = "red";
 
-  let currentColor = "black";
+  let currentColor = 0;
   let currentSize = 2;
 
   renderer.domElement.addEventListener("pointerdown", async (event) => {
@@ -139,7 +145,7 @@ async function start() {
       skyboxTex.needsUpdate = true;
       skyboxMat.needsUpdate = true;
 
-      instance.fillStyle = currentColor;
+      instance.fillStyle = palette[currentColor];
     }
 
     const drag = ui.drag(event);
@@ -168,8 +174,8 @@ async function start() {
 
     function pick() {
       const color = new Uint32Array(instance.getImageData(p1.x, p1.y, 1, 1).data.buffer);
-      currentColor = rgbToHex(uint32ToRGB(color));
-      colorButton.style.background = currentColor;
+      const hex = rgbToHex(uint32ToRGB(color));
+      set_current_color(Math.max(palette.indexOf(hex), 0));
     }
 
     if (picking)
@@ -218,6 +224,12 @@ async function start() {
     return button;
   }
 
+  function set_current_color(index) {
+    currentColor = index;
+    colorButton.style.background = `${palette[currentColor]}`;
+    colorPopover.hidden = true;
+  }
+
   function set_current_size(size) {
     currentSize = size;
     brushButton.textContent = `${size}`;
@@ -232,15 +244,26 @@ async function start() {
   }
   brushPopover.appendChild(brushControls);
 
+  const colorControls = make_grid_controls(8, 2);
+  colorControls.style.height = "128px";
+  colorControls.style.padding = "0";
+  for (let i = 0; i < 16; ++i) {
+    add_button(colorControls, "", (event) => set_current_color(i)).style.background = palette[i];
+  }
+  colorPopover.appendChild(colorControls);
+
   const moveControls = make_grid_controls();
 
   let picking = false;
 
   const colorButton = add_button(moveControls, "🎨", () => {
-    currentColor = `hsl(${Math.random() * 360}deg 85 75)`;
-    colorButton.style.background = currentColor;
+    colorPopover.hidden = !colorPopover.hidden;
+    document.addEventListener("pointerdown", (event) => {
+      if (!colorPopover.contains(event.target) && !colorButton.contains(event.target))
+        colorPopover.hidden = true;
+    }, { once: true });
   });
-  colorButton.style.background = currentColor;
+  colorButton.style.background = palette[currentColor];
   const pickButton = add_button(moveControls, "💉", () => {
     picking = !picking;
   });
@@ -390,6 +413,12 @@ function setup_ui(canvas) {
   brushPopover.style.alignSelf = "end";
   brushPopover.style.padding = ".5rem";
 
+  const colorPopover = html("div", { class: "ui-border", id: "popover-color", hidden: "" });
+  colorPopover.style.background = "black";
+  colorPopover.style.gridArea = "viewport";
+  colorPopover.style.alignSelf = "end";
+  colorPopover.style.padding = ".5rem";
+
   const {
     dialogueElement,
     dialogueBlockerElement,
@@ -403,6 +432,7 @@ function setup_ui(canvas) {
     viewport,
     border,
     brushPopover,
+    colorPopover,
 
     dialogueElement,
     dialogueBlockerElement,
@@ -427,5 +457,6 @@ function setup_ui(canvas) {
     dialoguePromptElement,
 
     brushPopover,
+    colorPopover,
   }
 }
