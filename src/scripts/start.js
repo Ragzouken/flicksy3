@@ -166,9 +166,14 @@ async function start() {
     eventToTexturePixels(event, p1);
     p0.copy(p1);
 
-    const color = new Uint32Array(instance.getImageData(p1.x, p1.y, 1, 1).data.buffer);
-    currentColor = rgbToHex(uint32ToRGB(color));
-    colorButton.style.background = currentColor;
+    function pick() {
+      const color = new Uint32Array(instance.getImageData(p1.x, p1.y, 1, 1).data.buffer);
+      currentColor = rgbToHex(uint32ToRGB(color));
+      colorButton.style.background = currentColor;
+    }
+
+    if (picking)
+      pick();
 
     drag.addEventListener("move", (event) => {
       eventToTexturePixels(event.detail, p1);
@@ -177,9 +182,7 @@ async function start() {
         if (p0.distanceTo(p1) < 32)
           drawLine();
       } else {
-        const color = new Uint32Array(instance.getImageData(p1.x, p1.y, 1, 1).data.buffer);
-        currentColor = rgbToHex(uint32ToRGB(color));
-        colorButton.style.background = currentColor;
+        pick();
       }
 
       p0.copy(p1);
