@@ -22,8 +22,15 @@ async function start() {
 
   const palette = [];
 
-  for (let i = 0; i < 16; ++i) {
-    palette.push(rgbToHex(HSVToRGB({ h: i / 16, s: .75, v: 1.0 })));
+  function randomise_palette() {
+    const offset = Math.random();
+
+    palette.length = 0;
+    for (let i = 0; i < 16; ++i) {
+      const h = (i / 16.0 + offset) % 1;
+      palette.push(rgbToHex(HSVToRGB({ h, s: .75, v: 1.0 })));
+    }
+    update_palette();
   }
 
   stateManager.addEventListener("change", async (event) => {
@@ -78,11 +85,44 @@ async function start() {
   const skyboxRendering = /** @type {CanvasRenderingContext2D} */ (stateManager.resources.get(texId));
 
   const skyboxTex = new THREE.Texture(skyboxRendering.canvas);
+  skyboxTex.type = THREE.ByteType;
+
   const skyboxGeo = new THREE.IcosahedronGeometry();
   const skyboxMat = new THREE.MeshBasicMaterial({ map: skyboxTex, side: THREE.BackSide, alphaTest: .5 });
   const skybox = new THREE.Mesh(skyboxGeo, skyboxMat);
 
-  skyboxTex.colorSpace = THREE.SRGBColorSpace;
+  function update_palette() {
+    if (!skyboxMat.userData.shader)
+      return;
+
+    skyboxMat.userData.shader.uniforms.palette.value = palette.map((hex) => new THREE.Color(hex));
+    skyboxMat.needsUpdate = true;
+  }
+
+  skyboxMat.onBeforeCompile = function (shader) {
+    skyboxMat.userData.shader = shader;
+
+    shader.uniforms.palette = {
+      value: palette.map((hex) => new THREE.Color(hex)),
+    };
+
+    shader.fragmentShader = 'uniform vec4[16] palette;\n' + shader.fragmentShader;
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <map_fragment>",
+      `
+      float lookup = texture2D(map, vMapUv).r;
+      uint index = uint(lookup * 16.0);
+      diffuseColor *= vec4(palette[index].rgb, 1.0);
+    `);
+  }
+
+  randomise_palette();
+
+  // skyboxTex.colorSpace = THREE.SRGBColorSpace;
+  skyboxTex.format = THREE.RGBAFormat;
+  skyboxTex.type = THREE.UnsignedByteType;
+  skyboxTex.generateMipmaps = false;
+
   skyboxTex.minFilter = THREE.NearestFilter;
   skyboxTex.magFilter = THREE.NearestFilter;
   skyboxTex.wrapS = THREE.RepeatWrapping;
@@ -144,8 +184,6 @@ async function start() {
       skyboxTex.image = instance.canvas;
       skyboxTex.needsUpdate = true;
       skyboxMat.needsUpdate = true;
-
-      instance.fillStyle = palette[currentColor];
     }
 
     const drag = ui.drag(event);
@@ -155,6 +193,9 @@ async function start() {
 
     function drawLine() {
       const s = currentSize;
+
+      const value = currentColor * 16;
+      instance.fillStyle = `rgb(${value} ${value} ${value})`;
 
       lineplot(p0.x, p0.y, p1.x, p1.y, (x, y) => {
         instance.fillRect(
@@ -180,6 +221,8 @@ async function start() {
 
     if (picking)
       pick();
+    else
+      drawLine();
 
     drag.addEventListener("move", (event) => {
       eventToTexturePixels(event.detail, p1);
@@ -226,7 +269,7 @@ async function start() {
 
   function set_current_color(index) {
     currentColor = index;
-    colorButton.style.background = `${palette[currentColor]}`;
+    colorButton.style.background = palette[currentColor];
     colorPopover.hidden = true;
   }
 
