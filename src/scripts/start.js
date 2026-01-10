@@ -118,7 +118,7 @@ async function start() {
 
   randomise_palette();
 
-  // skyboxTex.colorSpace = THREE.SRGBColorSpace;
+  skyboxTex.colorSpace = THREE.LinearSRGBColorSpace;
   skyboxTex.format = THREE.RGBAFormat;
   skyboxTex.type = THREE.UnsignedByteType;
   skyboxTex.generateMipmaps = false;
@@ -128,14 +128,16 @@ async function start() {
   skyboxTex.wrapS = THREE.RepeatWrapping;
   skyboxTex.wrapT = THREE.RepeatWrapping;
   skyboxTex.needsUpdate = true;
+
   skyboxMat.needsUpdate = true;
+  skyboxMat.toneMapped = false;
 
   scene.add(skybox);
 
   camera.position.set(0, 0, 0);
   camera.lookAt(skybox.position);
 
-  const { main, viewport, brushPopover, colorPopover } = setup_ui(renderer.domElement);
+  const { main, viewport } = setup_ui(renderer.domElement);
   main.setAttribute("data-editor-only", "");
 
   const raycaster = new THREE.Raycaster();
@@ -215,8 +217,8 @@ async function start() {
 
     function pick() {
       const color = new Uint32Array(instance.getImageData(p1.x, p1.y, 1, 1).data.buffer);
-      const hex = rgbToHex(uint32ToRGB(color));
-      set_current_color(Math.max(palette.indexOf(hex), 0));
+      const index = Math.round(uint32ToRGB(color).r / 16);
+      set_current_color(index);
     }
 
     if (picking)
@@ -246,6 +248,42 @@ async function start() {
     });
   });
 
+  function make_popover() {
+    const popover = html("div", { class: "ui-border", hidden: "" });
+    popover.style.background = "black";
+    popover.style.gridArea = "viewport";
+    popover.style.alignSelf = "end";
+    popover.style.padding = ".5rem";
+    main.appendChild(popover);
+    return popover;
+  }
+
+  /** 
+   * @param {HTMLElement} popover 
+   * @param  {...HTMLElement} ignores 
+   */
+  function open_popover(popover, ...ignores) {
+    popover.hidden = !popover.hidden;
+
+    if (!popover.hidden) {
+      document.addEventListener("pointerdown", (event) => {
+        const ignore 
+          = ignores.map((ignore) => ignore.contains(event.target)).reduce((a, b) => a || b)
+          || popover.contains(event.target);
+        popover.hidden ||= !ignore;
+      }, { once: true });
+
+      document.addEventListener("pointerup", (event) => {
+        const ignore 
+          = ignores.map((ignore) => ignore.contains(event.target)).reduce((a, b) => a || b)
+        popover.hidden ||= !ignore;
+      }, { once: true });
+    }
+  }
+
+  const brushPopover = make_popover();
+  const colorPopover = make_popover();
+
   function make_grid_controls(cols = 3, rows = 3) {
     const controls = html("fieldset", { class: "editor" });
     Object.assign(controls.style, {
@@ -270,13 +308,11 @@ async function start() {
   function set_current_color(index) {
     currentColor = index;
     colorButton.style.background = palette[currentColor];
-    colorPopover.hidden = true;
   }
 
   function set_current_size(size) {
     currentSize = size;
     brushButton.textContent = `${size}`;
-    brushPopover.hidden = true;
   }
 
   const brushControls = make_grid_controls(3, 2);
@@ -299,24 +335,12 @@ async function start() {
 
   let picking = false;
 
-  const colorButton = add_button(moveControls, "🎨", () => {
-    colorPopover.hidden = !colorPopover.hidden;
-    document.addEventListener("pointerdown", (event) => {
-      if (!colorPopover.contains(event.target) && !colorButton.contains(event.target))
-        colorPopover.hidden = true;
-    }, { once: true });
-  });
+  const colorButton = add_button(moveControls, "🎨", () => open_popover(colorPopover, colorButton));
   colorButton.style.background = palette[currentColor];
   const pickButton = add_button(moveControls, "💉", () => {
     picking = !picking;
   });
-  const brushButton = add_button(moveControls, `${currentSize}`, (event) => {
-    brushPopover.hidden = !brushPopover.hidden;
-    document.addEventListener("pointerdown", (event) => {
-      if (!brushPopover.contains(event.target) && !brushButton.contains(event.target))
-        brushPopover.hidden = true;
-    }, { once: true });
-  });
+  const brushButton = add_button(moveControls, `${currentSize}`, () => open_popover(brushPopover, brushButton));
 
   const undoButton = add_button(moveControls, "↩️", () => stateManager.undo());
   const lookButton = add_button(moveControls, "👁️");
@@ -450,18 +474,6 @@ function setup_ui(canvas) {
   const border = html("div", { class: "ui-border" });
   border.style.gridArea = "viewport";
 
-  const brushPopover = html("div", { class: "ui-border", id: "popover-brush", hidden: "" });
-  brushPopover.style.background = "black";
-  brushPopover.style.gridArea = "viewport";
-  brushPopover.style.alignSelf = "end";
-  brushPopover.style.padding = ".5rem";
-
-  const colorPopover = html("div", { class: "ui-border", id: "popover-color", hidden: "" });
-  colorPopover.style.background = "black";
-  colorPopover.style.gridArea = "viewport";
-  colorPopover.style.alignSelf = "end";
-  colorPopover.style.padding = ".5rem";
-
   const {
     dialogueElement,
     dialogueBlockerElement,
@@ -474,8 +486,6 @@ function setup_ui(canvas) {
     { class: "centered" },
     viewport,
     border,
-    brushPopover,
-    colorPopover,
 
     dialogueElement,
     dialogueBlockerElement,
@@ -498,8 +508,5 @@ function setup_ui(canvas) {
     dialogueBlockerElement,
     dialogueContentElement,
     dialoguePromptElement,
-
-    brushPopover,
-    colorPopover,
   }
 }
