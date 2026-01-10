@@ -346,15 +346,24 @@ async function start() {
   const lookButton = add_button(moveControls, "👁️");
   const redoButton = add_button(moveControls, "↪️", () => stateManager.redo());
 
+  const savePopover = make_popover();
+  savePopover.style.padding = "0 .5rem";
+  const saveControls = make_grid_controls(3, 1);
+  saveControls.style.margin = "0";
+  saveControls.style.height = "unset";
+  savePopover.appendChild(saveControls);
+
+  const menuButton = add_button(moveControls, "⚙️", () => open_popover(savePopover, menuButton));
+
+  const saveButton = add_button(saveControls, "💾", doSave);
+  add_button(saveControls, "📦", runExport);
+  add_button(saveControls, "📥", runImport);
+
   async function doSave() {
     saveButton.disabled = true;
     await stateManager.makeBundle().then((data) => storage.save(data, SAVE_SLOT));
     saveButton.disabled = false;
   }
-
-  const saveButton = add_button(moveControls, "💾", doSave);
-  add_button(moveControls, "📦", runExport);
-  add_button(moveControls, "📥", runImport);
 
   async function runImport() {
     const [file] = await maker.pickFiles("*.html");
